@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, Image, TouchableOpacity } from "react-native";
+import { View, Image, TouchableOpacity, ActivityIndicator } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { IconButton } from "react-native-paper";
 import { AuthContext } from "../context/AuthContext";
-import { getProfileImageUrl, getFavorite, getOperation } from "../context/firebase"; // Add getOperation
+import { getProfileImageUrl, getFavorite, getOperation } from "../context/firebase";
 import CoursScreen from "./CoursScreen";
 import TransactionScreen from "./TransactionScreen";
 import PortefeuilleScreen from "./PortefeuilleScreen";
@@ -19,64 +19,119 @@ const HomeScreen = () => {
   const navigation = useNavigation();
   const [photo, setPhoto] = useState(null);
   const [favoriteCrypto, setFavoriteCrypto] = useState(null);
-  const [operation, setOperation] = useState(null); // State to store the operation data
+  const [operation, setOperation] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadProfileImage = async () => {
-      if (user?.uid) {
-        const imageUrl = await getProfileImageUrl(user.uid);
-        // console.log('Profile image URL:', imageUrl);  // Log the fetched image URL
-        if (imageUrl) setPhoto(imageUrl);
+    const initializeApp = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        if (user?.uid) {
+          // Chargement de l'image de profil
+          try {
+            const imageUrl = await getProfileImageUrl(user.uid);
+            if (imageUrl) setPhoto(imageUrl);
+          } catch (e) {
+            console.error('Erreur lors du chargement de l\'image:', e);
+            // Continue l'exécution même si l'image échoue
+          }
+
+          // Chargement des favoris
+          try {
+            const favorite = await getFavorite(user.uid);
+            setFavoriteCrypto(favorite);
+          } catch (e) {
+            console.error('Erreur lors du chargement des favoris:', e);
+            // Continue l'exécution même si les favoris échouent
+          }
+        }
+
+        // Initialisation des notifications
+        try {
+          const lastNotified = await AsyncStorage.getItem("lastNotified");
+          if (lastNotified === null) {
+            await AsyncStorage.setItem("lastNotified", "");
+          }
+        } catch (e) {
+          console.error('Erreur lors de l\'initialisation des notifications:', e);
+          // Continue l'exécution même si les notifications échouent
+        }
+
+      } catch (e) {
+        console.error('Erreur lors de l\'initialisation:', e);
+        setError(e);
+      } finally {
+        setIsLoading(false);
       }
     };
-    loadProfileImage();
+
+    initializeApp();
   }, [user]);
 
   useEffect(() => {
-    if (user?.uid) {
-      getFavorite(user.uid).then((favoriteCrypto) => {
-        console.log('Favorite crypto fetched:', favoriteCrypto);  // Log favorite crypto
-        setFavoriteCrypto(favoriteCrypto);
-      });
-    }
-  }, [user]);
-
-  useEffect(() => {
-    getOperation((operationData) => {
-      console.log('Operation data fetched:', operationData);  // Log the fetched operation data
-      setOperation(operationData); // Update the operation state with the fetched operation data
+    const unsubscribe = getOperation((operationData) => {
+      try {
+        console.log('Operation data fetched:', operationData);
+        setOperation(operationData);
+      } catch (e) {
+        console.error('Erreur lors de la récupération des opérations:', e);
+      }
     });
-  }, []); // Fetch operation once on component mount
+
+    // Cleanup function
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (operation && favoriteCrypto && operation.cryptoname === favoriteCrypto) {
-      console.log('Checking and sending notification for operation:', operation);  // Log operation and crypto match
-
       const checkAndNotify = async () => {
-        const lastNotified = await AsyncStorage.getItem("lastNotified");
-        console.log('Last notified ID:', lastNotified);  // Log last notified ID
+        try {
+          const lastNotified = await AsyncStorage.getItem("lastNotified");
+          console.log('Last notified ID:', lastNotified);
 
-        if (lastNotified !== String(operation.idTransaction)) {
-          console.log('New operation detected, sending notification...');  // Log notification sending
-          await AsyncStorage.setItem("lastNotified", String(operation.idTransaction));
+          if (lastNotified !== String(operation.idTransaction)) {
+            await AsyncStorage.setItem("lastNotified", String(operation.idTransaction));
 
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "Nouvelle opération",
-              body: `${operation.nomEffectuant} a effectué un ${operation.name} sur votre cryptomonnaie favorite : ${operation.cryptoname}`,
-              sound: true,
-            },
-            trigger: null,
-          });
-          console.log('Notification scheduled');  // Log after notification is scheduled
-        } else {
-          console.log('Operation already notified');  // Log if the operation has already been notified
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: "Nouvelle opération",
+                body: `${operation.nomEffectuant} a effectué un ${operation.name} sur votre cryptomonnaie favorite : ${operation.cryptoname}`,
+                sound: true,
+              },
+              trigger: null,
+            });
+          }
+        } catch (error) {
+          console.error('Erreur lors de la gestion des notifications:', error);
         }
       };
 
       checkAndNotify();
     }
-  }, [operation, favoriteCrypto]); // Re-run the effect if either operation or favoriteCrypto changes
+  }, [operation, favoriteCrypto]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#000" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Une erreur est survenue. Veuillez réessayer.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>

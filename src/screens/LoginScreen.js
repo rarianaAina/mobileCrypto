@@ -5,6 +5,9 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { LinearGradient } from 'expo-linear-gradient'; // Import LinearGradient
 
 const LoginScreen = ({ navigation }) => {
+console.log("Login");
+console.warn("Avertissement : Login Screen chargé");
+console.error("Erreur : Login Screen chargé");
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
