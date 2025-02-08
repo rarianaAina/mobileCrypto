@@ -223,22 +223,25 @@ const getOperation = (callback) => {
 /**
  * 🔹 Enregistre une transaction dans la base de données en temps réel Firebase.
  * @param {Object} transactionData - Les données de la transaction (montant, type, etc.).
- * @param {string} userId - L'UID de l'utilisateur effectuant la transaction.
+ * @param {string} type - Le type de transaction (depot ou retrait).
  */
 const addTransaction = async (transactionData, type) => {
   try {
-    const transactionId = `transaction_${new Date().toISOString()}`; // Générer un ID unique pour la transaction
-    const transactionRef = ref(realtimeDb, `transactions/${type}`);
+    const transactionId = `transaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // ID unique
+    const transactionRef = ref(realtimeDb, `transactions/${type}/${transactionId}`);
     
-    // Enregistrer la transaction dans la base de données
-    await set(transactionRef, transactionData);
+    // Enregistrer la transaction avec son ID
+    await set(transactionRef, {
+      ...transactionData,
+      id: transactionId
+    });
+    
     console.log("Transaction ajoutée avec ID: ", transactionId);
   } catch (error) {
     console.error("Erreur lors de l'ajout de la transaction: ", error);
     throw error;
   }
 };
-
 
 /**
  * 🔹 Récupère les informations d'un utilisateur depuis Firebase Realtime Database.
